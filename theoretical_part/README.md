@@ -5,7 +5,7 @@ A few comments on them:
 
 1. Finding forward SDE, for which original markov chain is one of possible discretizations.
 2. Under some mild conditions we can get reverse ODE preserving marginal distributions.
-![Forward and Backward Processes](./docs/1_forward_and_backward.jpg)
+![Forward and Backward Processes](./theoretical_part/docs/1_forward_and_backward.jpg)
 
 3. To specify forward SDE we work with, we have to define $\alpha(t)$. Rational choice here is to use function fitting discrete schedule from the paper. Proposed family of function fit shedules from paper well. The best config from paper corresponds to $alpha=0.0136$.
 ![alpha schedule](./docs/2_alpha_t.jpg)
