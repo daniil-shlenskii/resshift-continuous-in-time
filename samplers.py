@@ -48,6 +48,7 @@ class BaseSampler:
     eta = self._etas[step_idx]
     return -(x - x0 * (1 - eta) - eta * y0) / (self.kappa**2 * eta)
 
+  @torch.no_grad()
   def _ode_step(self, x, step_idx, y0, lq):
     pass
 
@@ -65,7 +66,7 @@ class BaseSampler:
     x = y0_noised.to(self.device)
     for step_idx in range(len(timesteps) - 1):
       x = self._ode_step(x, step_idx, y0, lq)
-    return self.ae.decode(x)
+    return self.ae.decode(x).clamp(-1, 1)
 
   def _prior_sample(self, y):
       eta_end = self._etas[0]
