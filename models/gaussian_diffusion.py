@@ -106,11 +106,14 @@ def _extract_into_tensor(arr, timesteps, broadcast_shape):
         res = res[..., None]
     return res.expand(broadcast_shape)
 
-def _extract_etas_into_tensor_continuous(cont_t, broadcast_shape, tfs=None):
-    a = 1
-    gamma = 1
+
+def eta_fn(t, a, alpha_T_prime, T): 
+  lamb = np.log(1 + alpha_T_prime / a)
+  return a * ((torch.exp(lamb * t) - 1) / lamb - t)
+
+def _extract_etas_into_tensor_continuous(cont_t, broadcast_shape, a, alpha_T_prime, T, tfs=None):
+    etas = eta_fn((1 / T - 1) * cont_t / (T - 1) + 1, a, alpha_T_prime, T)
     
-    etas = a * (torch.exp(gamma * cont_t) / gamma - cont_t) - (a / gamma) # check intergal
     if tfs:
         etas = tfs(etas) 
     
@@ -147,6 +150,9 @@ class GaussianDiffusion:
         scale_factor=None,
         normalize_input=True,
         latent_flag=True,
+        T = 15,
+        a = 1,
+        alpha_T_prime = 2
     ):
         self.kappa = kappa
         self.model_mean_type = model_mean_type
@@ -155,7 +161,9 @@ class GaussianDiffusion:
         self.normalize_input = normalize_input
         self.latent_flag = latent_flag
         self.sf = sf
-        self.kappa = kappa
+        self.T = T
+        self.a = a
+        self.alpha_T_prime = alpha_T_prime
 
         # Use float64 for accuracy.
         self.sqrt_etas = sqrt_etas
@@ -201,11 +209,11 @@ class GaussianDiffusion:
         :param t: the number of diffusion steps (minus 1). Here, 0 means one step.
         :return: A tuple (mean, variance, log_variance), all of x_start's shape.
         """
-        # mean = _extract_into_tensor(self.etas, t, x_start.shape) * (y - x_start) + x_start
-        # variance = _extract_into_tensor(self.etas, t, x_start.shape) * self.kappa**2
+        mean = _extract_into_tensor(self.etas, t, x_start.shape) * (y - x_start) + x_start
+        variance = _extract_into_tensor(self.etas, t, x_start.shape) * self.kappa**2
 
-        mean = _extract_etas_into_tensor_continuous(t, x_start.shape) * (y - x_start) + x_start
-        variance = _extract_etas_into_tensor_continuous(t, x_start.shape) * self.kappa**2
+        # mean = _extract_etas_into_tensor_continuous(t, x_start.shape) * (y - x_start) + x_start
+        # variance = _extract_etas_into_tensor_continuous(t, x_start.shape) * self.kappa**2
         
         log_variance = variance.log()
         return mean, variance, log_variance
@@ -231,8 +239,8 @@ class GaussianDiffusion:
         # )
 
         return (
-            _extract_etas_into_tensor_continuous(t, x_start.shape) * (y - x_start) + x_start
-            + _extract_etas_into_tensor_continuous(t, x_start.shape, tfs=lambda etas: self.kappa*torch.sqrt(etas)) * noise
+            _extract_etas_into_tensor_continuous(t, x_start.shape, self.a, self.alpha_T_prime, self.T) * (y - x_start) + x_start
+            + _extract_etas_into_tensor_continuous(t, x_start.shape, self.a, self.alpha_T_prime, self.T, tfs=lambda etas: self.kappa*torch.sqrt(etas)) * noise
         )
 
     def q_posterior_mean_variance(self, x_start, x_t, t):
@@ -339,42 +347,42 @@ class GaussianDiffusion:
 
     def _predict_xstart_from_eps(self, x_t, y, t, eps):
         assert x_t.shape == eps.shape
-        # return  (
-        #     x_t - _extract_into_tensor(self.sqrt_etas, t, x_t.shape) * self.kappa * eps
-        #         - _extract_into_tensor(self.etas, t, x_t.shape) * y
-        # ) / _extract_into_tensor(1 - self.etas, t, x_t.shape)
-
         return  (
-            x_t - _extract_etas_into_tensor_continuous(t, x_t.shape, lambda etas: torch.sqrt(etas)) * self.kappa * eps
-                - _extract_etas_into_tensor_continuous(t, x_t.shape) * y
-        ) / _extract_etas_into_tensor_continuous(t, x_t.shape, lambda etas: 1 - etas)
+            x_t - _extract_into_tensor(self.sqrt_etas, t, x_t.shape) * self.kappa * eps
+                - _extract_into_tensor(self.etas, t, x_t.shape) * y
+        ) / _extract_into_tensor(1 - self.etas, t, x_t.shape)
+
+        # return  (
+        #     x_t - _extract_etas_into_tensor_continuous(t, x_t.shape, lambda etas: torch.sqrt(etas)) * self.kappa * eps
+        #         - _extract_etas_into_tensor_continuous(t, x_t.shape) * y
+        # ) / _extract_etas_into_tensor_continuous(t, x_t.shape, lambda etas: 1 - etas)
         
             
 
     def _predict_xstart_from_eps_scale(self, x_t, y, t, eps):
         assert x_t.shape == eps.shape
-        # return  (
-        #     x_t - eps - _extract_into_tensor(self.etas, t, x_t.shape) * y
-        # ) / _extract_into_tensor(1 - self.etas, t, x_t.shape)
+        return  (
+            x_t - eps - _extract_into_tensor(self.etas, t, x_t.shape) * y
+        ) / _extract_into_tensor(1 - self.etas, t, x_t.shape)
 
-        return (
-            x_t - eps - _extract_etas_into_tensor_continuous(t, x_t.shape) * y
-        ) / _extract_etas_into_tensor_continuous(t, x_t.shape, lambda etas: 1 - self.etas)
+        # return (
+        #     x_t - eps - _extract_etas_into_tensor_continuous(t, x_t.shape) * y
+        # ) / _extract_etas_into_tensor_continuous(t, x_t.shape, lambda etas: 1 - self.etas)
 
     def _predict_xstart_from_residual(self, y, residual):
         assert y.shape == residual.shape
         return (y - residual)
 
     def _predict_eps_from_xstart(self, x_t, y, t, pred_xstart):
-        # return (
-        #     x_t - _extract_into_tensor(1 - self.etas, t, x_t.shape) * pred_xstart
-        #         - _extract_into_tensor(self.etas, t, x_t.shape) * y
-        # ) / _extract_into_tensor(self.kappa * self.sqrt_etas, t, x_t.shape)
-
         return (
-            x_t - _extract_etas_into_tensor_continuous(t, x_t.shape, lambda etas: 1 - etas) * pred_xstart
-                - _extract_etas_into_tensor_continuous(t, x_t.shape) * y
-        ) / _extract_etas_into_tensor_continuous(t, x_t.shape, lambda etas: self.kappa * np.sqrt(etas))
+            x_t - _extract_into_tensor(1 - self.etas, t, x_t.shape) * pred_xstart
+                - _extract_into_tensor(self.etas, t, x_t.shape) * y
+        ) / _extract_into_tensor(self.kappa * self.sqrt_etas, t, x_t.shape)
+
+        # return (
+        #     x_t - _extract_etas_into_tensor_continuous(t, x_t.shape, lambda etas: 1 - etas) * pred_xstart
+        #         - _extract_etas_into_tensor_continuous(t, x_t.shape) * y
+        # ) / _extract_etas_into_tensor_continuous(t, x_t.shape, lambda etas: self.kappa * np.sqrt(etas))
 
     def p_sample(self, model, x, y, t, clip_denoised=True, denoised_fn=None, model_kwargs=None, noise_repeat=False):
         """
@@ -573,9 +581,9 @@ class GaussianDiffusion:
 
         t = th.tensor([self.num_timesteps-1,] * y.shape[0], device=y.device).long()
 
-        # return y + _extract_into_tensor(self.kappa * self.sqrt_etas, t, y.shape) * noise
+        return y + _extract_into_tensor(self.kappa * self.sqrt_etas, t, y.shape) * noise
 
-        return y + _extract_etas_into_tensor_continuous(t, y.shape, lambda etas: self.kappa * torch.sqrt(etas)) * noise
+        # return y + _extract_etas_into_tensor_continuous(t, y.shape, lambda etas: self.kappa * torch.sqrt(etas)) * noise
 
 
     def training_losses(
@@ -619,14 +627,14 @@ class GaussianDiffusion:
                 ModelMeanType.RESIDUAL: z_y - z_start,
                 ModelMeanType.EPSILON: noise,
                 # ModelMeanType.EPSILON_SCALE: noise*self.kappa*_extract_into_tensor(self.sqrt_etas, t, noise.shape),
-                ModelMeanType.EPSILON_SCALE: noise*self.kappa*_extract_etas_into_tensor_continuous(t, noise.shape, lambda etas: torch.sqrt(etas)),
+                ModelMeanType.EPSILON_SCALE: noise*self.kappa*_extract_etas_into_tensor_continuous(t, noise.shape, self.a, self.alpha_T_prime, self.T, lambda etas: torch.sqrt(etas)),
             }[self.model_mean_type]
             assert model_output.shape == target.shape == z_start.shape
             terms["mse"] = mean_flat((target - model_output) ** 2)
-            # if self.model_mean_type == ModelMeanType.EPSILON_SCALE:
-            #     terms["mse"] /= (self.kappa**2 * _extract_into_tensor(self.etas, t, t.shape))
             if self.model_mean_type == ModelMeanType.EPSILON_SCALE:
-                terms["mse"] /= (self.kappa**2 * _extract_etas_into_tensor_continuous(t, t.shape))
+                terms["mse"] /= (self.kappa**2 * _extract_into_tensor(self.etas, t, t.shape))
+            # if self.model_mean_type == ModelMeanType.EPSILON_SCALE:
+            #     terms["mse"] /= (self.kappa**2 * _extract_etas_into_tensor_continuous(t, t.shape))
             if self.loss_type == LossType.WEIGHTED_MSE:
                 weights = _extract_into_tensor(self.weight_loss_mse, t, t.shape)
             else:
@@ -653,11 +661,11 @@ class GaussianDiffusion:
             if self.latent_flag:
                 # the variance of latent code is around 1.0
                 # std = th.sqrt(_extract_into_tensor(self.etas, t, inputs.shape) * self.kappa**2 + 1)
-                std = th.sqrt(_extract_etas_into_tensor_continuous(t, inputs.shape) * self.kappa**2 + 1)
+                std = th.sqrt(_extract_etas_into_tensor_continuous(t, inputs.shape, self.a, self.alpha_T_prime, self.T) * self.kappa**2 + 1)
                 inputs_norm = inputs / std
             else:
                 # inputs_max = _extract_into_tensor(self.sqrt_etas, t, inputs.shape) * self.kappa * 3 + 1
-                inputs_max = _extract_etas_into_tensor_continuous(t, inputs.shape, lambda etas: torch.sqrt(etas)) * self.kappa * 3 + 1
+                inputs_max = _extract_etas_into_tensor_continuous(t, inputs.shape, lambda etas: torch.sqrt(etas), self.a, self.alpha_T_prime, self.T) * self.kappa * 3 + 1
                 inputs_norm = inputs / inputs_max
         else:
             inputs_norm = inputs
