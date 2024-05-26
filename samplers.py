@@ -41,8 +41,18 @@ class BaseSampler:
 
     self.device = device
 
-    self.f = lambda alpha, e0, score:\
-              alpha * e0 - 0.5 * alpha * self.kappa**2 * score
+  def f(self, step_idx, x, y0, lq):
+    alpha = self._alphas[step_idx]
+    eta = self._etas[step_idx]
+
+    std = (self.kappa**2 * eta + 1)**0.5
+    timestep = torch.tensor([self._timesteps[step_idx]] * len(x), dtype=x.dtype, device=x.device)
+    x0 = self.x0_pred_fn(x / std, timestep * self.T - 1, lq)
+
+    e0 = y0 - x0
+    score = self._get_score_with_x0(x, step_idx, x0, y0)
+    
+    return alpha * e0 - 0.5 * alpha * self.kappa**2 * score
 
   def _get_score_with_x0(self, x, step_idx, x0, y0):
     eta = self._etas[step_idx]
@@ -69,22 +79,27 @@ class BaseSampler:
     return self.ae.decode(x).clamp(-1, 1)
 
   def _prior_sample(self, y):
-      eta_end = self._etas[0]
-      return y + torch.randn_like(y) * eta_end**0.5 * self.kappa
+    eta_end = self._etas[0]
+    return y + torch.randn_like(y) * eta_end**0.5 * self.kappa
 
 
 class EulerSampler(BaseSampler):
-    def _ode_step(self, x, step_idx, y0, lq):
-        alpha = self._alphas[step_idx]
-        eta = self._etas[step_idx]
+  def _ode_step(self, x, step_idx, y0, lq):
+    h = self._timesteps[step_idx + 1] - self._timesteps[step_idx]
+    x_next= x + h * self.f(step_idx, x, y0, lq)
+    return x_next
 
-        std = (self.kappa**2 * eta + 1)**0.5
-        timestep = torch.tensor([self._timesteps[step_idx]] * len(x), dtype=x.dtype, device=x.device)
-        x0 = self.x0_pred_fn(x / std, timestep * self.T - 1, lq)
+class HeunSampler(BaseSampler):
+  def _ode_step(self, x, step_idx, y0, lq):
+    h = self._timesteps[step_idx + 1] - self._timesteps[step_idx]
 
-        e0 = y0 - x0
-        score = self._get_score_with_x0(x, step_idx, x0, y0)
+    # first step
+    f_inter = self.f(step_idx, x, y0, lq)
+    x_inter= x + h * f_inter
 
-        h = self._timesteps[step_idx + 1] - self._timesteps[step_idx]
-        x_next= x + h * self.f(alpha, e0, score)
-        return x_next
+    if step_idx == (len(self._timesteps) - 2):
+      return x_inter
+
+    # second step
+    x_next= x + 0.5 * h * (f_inter +  self.f(step_idx + 1, x_inter, y0, lq))
+    return x_next
