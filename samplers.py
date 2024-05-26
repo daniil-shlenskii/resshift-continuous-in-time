@@ -58,10 +58,10 @@ class BaseSampler:
     eta = self._etas[step_idx]
     return -(x - x0 * (1 - eta) - eta * y0) / (self.kappa**2 * eta)
 
-  @torch.no_grad()
   def _ode_step(self, x, step_idx, y0, lq):
     pass
 
+  @torch.no_grad()
   def __call__(self, timesteps, lq):
     self._timesteps = timesteps.to(self.device)
     self._alphas = self.alpha_fn(timesteps).to(self.device)

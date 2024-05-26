@@ -11,7 +11,7 @@ from pathlib import Path
 from argparse import ArgumentParser
 
 from utils import instantiate_from_config, prepare_model
-from samplers import EulerSampler
+from samplers import EulerSampler, HeunSampler
 
 
 def get_parser():
@@ -47,6 +47,20 @@ def get_parser():
         type=int,
         default=15,
     )
+    parser.add_argument(
+        "--sampler",
+        type=str,
+        default="euler",
+    )
+    parser.add_argument(
+        "--ro",
+        type=int,
+        default="1",
+    )
+    parser.add_argument(
+        "--reverse_ro",
+        action='store_true',
+    )
     args = parser.parse_args()
     return args
 
@@ -74,6 +88,11 @@ class InferenceDataset(Dataset):
         im = self.transforms(im)
         return path, im
 
+def get_timesteps(N, ro):
+    timesteps = np.arange(N) / (N - 1)
+    timesteps = (1 - timesteps)**ro
+    return timesteps
+
 def main():
     args = get_parser()
 
@@ -94,15 +113,34 @@ def main():
         num_workers=2,
     )
 
-    sampler = EulerSampler(ae=ae, x0_pred_fn=model, device="cuda")
-    timesteps = torch.tensor(list(np.linspace(0, 1, args.n_steps + 1))[::-1])
+    if args.sampler == "euler":
+        sampler = EulerSampler(ae=ae, x0_pred_fn=model, device="cuda")
+    elif args.sampler == "heun":
+        sampler = HeunSampler(ae=ae, x0_pred_fn=model, device="cuda")
+    else:
+        raise ValueError()
+    
+    subdir_name = f"{args.sampler}_{args.n_steps}_{args.ro}"
+    if args.reverse_ro:
+        subdir_name = subdir_name + "_reversed-ro"
+    subdir_path = Path(args.out_dir) / subdir_name
+    subdir_path.mkdir(exist_ok=True, parents=True)
+
+    timesteps = list(get_timesteps(args.n_steps + 1, args.ro))
+    if args.reverse_ro:
+        timesteps = 1 - torch.tensor(timesteps[::-1])
+    else:
+        timesteps = torch.tensor(timesteps)
     
     for file_names, lq in loader:
         lq = lq.cuda()
         out = sampler(timesteps, lq).permute(0, 2, 3, 1).detach().cpu().numpy()
         out = out * 0.5 + 0.5
         for file_name, sr_image in zip(file_names, out):
-            Image.fromarray(np.uint8(sr_image*255)).save(str(Path("logs") / file_name))
+            Image.fromarray(np.uint8(sr_image*255)).save(str(subdir_path / file_name))
+        break
+
+    print(f"Images saved into {subdir_path}")
 
 if __name__ == "__main__":
     main()
