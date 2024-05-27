@@ -92,7 +92,7 @@ def main():
 
     result_dir = Path(args.result_dir)
     result_dir.mkdir(exist_ok=True, parents=True)
-    result_path = result_dir / args.target_dir.split("/")[-1]
+    result_path = result_dir / args.pred_dir.split("/")[-1]
     
     with open(result_path, 'w') as file:
         json.dump(scores, file)
