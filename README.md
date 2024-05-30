@@ -8,8 +8,10 @@ In this repo we implement idea from the [ResShift](https://arxiv.org/abs/2307.12
 ```bash
 # Downloading weights
 mkdir weights
+cd weights
 wget https://github.com/zsyOAOA/ResShift/releases/download/v2.0/autoencoder_vq_f4.pth # autoencoder
 wget gdown 1P17fgFhSSpL5mbhSND2KjDijxhZLavO_ # denoiser
+cd ..
 ```
 After that you can immediately start working in the `playground/pgd.ipynb` file.
 
