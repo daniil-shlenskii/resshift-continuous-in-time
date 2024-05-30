@@ -1,7 +1,7 @@
 
 # ResShift continuous-in-time
 
-In this repo we implement idea from the [ResShift](https://arxiv.org/abs/2307.12348) paper in the continuous setup, i.e. we change Markov Chain represented in the original paper with Stochstic Differential Equation. We investigate possibilities that such setup opens, namely, we utilize high order ODE solvers and consider different time discretizations, what results in better than in the paper. Details can be found in report (!link to the report!)
+In this repo we implement idea from the [ResShift](https://arxiv.org/abs/2307.12348) paper in the continuous setup, i.e. we change Markov Chain represented in the original paper with Stochstic Differential Equation. We investigate possibilities that such setup opens, namely, we utilize high order ODE solvers and consider different time discretizations, what results in better than in the paper. Details can be found in ![report](./project_description.pdf)
 
 **Inference**
 ---
