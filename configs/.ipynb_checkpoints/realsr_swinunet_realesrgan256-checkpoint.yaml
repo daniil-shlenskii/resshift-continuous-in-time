@@ -158,10 +158,10 @@ train:
   # optimization settings
   weight_decay: 0               
   ema_rate: 0.999
-  iterations: 100000           # total iterations
+  iterations: 50000           # total iterations
   # save logging
-  save_freq: 50000             
-  log_freq: [10000, 10000, 10000]         # [training loss, training images, val images]
+  save_freq: 25000             
+  log_freq: [10000, 1000, 1000]         # [training loss, training images, val images]
   local_logging: True           # manually save images
   tf_logging: False             # tensorboard logging
   # validation settings
