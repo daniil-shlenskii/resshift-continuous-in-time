@@ -1,20 +1,44 @@
-LOWRES_DIR="testdata/Val_SR/lq"
-TARGET_DIR="testdata/Val_SR/gt"
-UPSCALES_DIR="upscales/Val_SR"
-CONFIG_PATH="configs/inference.yaml"
-RESULT_DIR="results"
+OMP_NUM_THREADS=8
+CUDA_VISIBLE_DEVICES=3
 
-for ro in 2 3
+POSTFIX=_model_50k_9
+CONFIG_POSTFIX=_model_50k
+
+LOWRES_DIR=imagenet_256_test_lowres
+TARGET_DIR=imagenet_256_test
+UPSCALES_DIR=upscales${POSTFIX}
+CONFIG_PATH=configs/inference${CONFIG_POSTFIX}.yaml
+RESULT_DIR=results${POSTFIX}
+
+NFE=9
+BSIZE=96
+
+
+ro=1
+python inference.py --in_dir $LOWRES_DIR --out_dir $UPSCALES_DIR --config_path $CONFIG_PATH --batch_size $BSIZE --ro $ro --n_steps $NFE --n_steps $NFE
+python compute_metrics.py --pred_dir ${UPSCALES_DIR}/euler_${NFE}_${ro} --target_dir $TARGET_DIR --result_dir $RESULT_DIR --batch_size $BSIZE 
+
+for ro in 2 4 8
 do
-    python inference.py --in_dir $LOWRES_DIR --out_dir $UPSCALES_DIR --config_path $CONFIG_PATH --batch_size 32 --ro $ro
-    python compute_metrics.py --pred_dir ${UPSCALES_DIR}/euler_15_${ro} --target_dir $TARGET_DIR --result_dir $RESULT_DIR --batch_size 32
+    python inference.py --in_dir $LOWRES_DIR --out_dir $UPSCALES_DIR --config_path $CONFIG_PATH --batch_size $BSIZE --ro $ro --n_steps $NFE
+    python compute_metrics.py --pred_dir ${UPSCALES_DIR}/euler_${NFE}_${ro} --target_dir $TARGET_DIR --result_dir $RESULT_DIR --batch_size $BSIZE
 
-    python inference.py --in_dir $LOWRES_DIR --out_dir $UPSCALES_DIR --config_path $CONFIG_PATH --batch_size 32 --ro $ro --reverse_ro
-    python compute_metrics.py --pred_dir ${UPSCALES_DIR}/euler_15_${ro}_reversed-ro --target_dir $TARGET_DIR --result_dir $RESULT_DIR --batch_size 32
+    python inference.py --in_dir $LOWRES_DIR --out_dir $UPSCALES_DIR --config_path $CONFIG_PATH --batch_size $BSIZE --ro $ro --reverse_ro --n_steps $NFE
+    python compute_metrics.py --pred_dir ${UPSCALES_DIR}/euler_${NFE}_${ro}_reversed-ro --target_dir $TARGET_DIR --result_dir $RESULT_DIR --batch_size $BSIZE
+done
 
-    python inference.py --in_dir $LOWRES_DIR --out_dir $UPSCALES_DIR --config_path $CONFIG_PATH --batch_size 32 --ro $ro --sampler heun --n_steps 8
-    python compute_metrics.py --pred_dir ${UPSCALES_DIR}/heun_8_${ro} --target_dir $TARGET_DIR --result_dir $RESULT_DIR --batch_size 32
 
-    python inference.py --in_dir $LOWRES_DIR --out_dir $UPSCALES_DIR --config_path $CONFIG_PATH --batch_size 32 --ro $ro --sampler heun --n_steps 8 --reverse_ro
-    python compute_metrics.py --pred_dir ${UPSCALES_DIR}/heun_8_${ro}_reversed-ro --target_dir $TARGET_DIR --result_dir $RESULT_DIR --batch_size 32
+NFE=5
+
+ro=1
+python inference.py --in_dir $LOWRES_DIR --out_dir $UPSCALES_DIR --config_path $CONFIG_PATH --batch_size $BSIZE --ro $ro --n_steps $NFE --n_steps $NFE --sampler heun
+python compute_metrics.py --pred_dir ${UPSCALES_DIR}/heun_${NFE}_${ro} --target_dir $TARGET_DIR --result_dir $RESULT_DIR --batch_size $BSIZE 
+
+for ro in 2 4 8
+do
+    python inference.py --in_dir $LOWRES_DIR --out_dir $UPSCALES_DIR --config_path $CONFIG_PATH --batch_size $BSIZE --ro $ro --n_steps $NFE  --sampler heun
+    python compute_metrics.py --pred_dir ${UPSCALES_DIR}/heun_${NFE}_${ro} --target_dir $TARGET_DIR --result_dir $RESULT_DIR --batch_size $BSIZE
+
+    python inference.py --in_dir $LOWRES_DIR --out_dir $UPSCALES_DIR --config_path $CONFIG_PATH --batch_size $BSIZE --ro $ro --reverse_ro --n_steps $NFE --sampler heun
+    python compute_metrics.py --pred_dir ${UPSCALES_DIR}/heun_${NFE}_${ro}_reversed-ro --target_dir $TARGET_DIR --result_dir $RESULT_DIR --batch_size $BSIZE
 done
