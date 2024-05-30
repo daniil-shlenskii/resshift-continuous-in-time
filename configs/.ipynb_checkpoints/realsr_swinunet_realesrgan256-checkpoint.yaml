@@ -3,7 +3,7 @@ trainer:
 
 model:
   target: models.unet.UNetModelSwin
-  ckpt_path: weights/resshift_realsrx4_s15_v2.pth
+  ckpt_path: weights/resshift_realsrx4_s15_v1.pth
   params:
     image_size: 64
     in_channels: 3
