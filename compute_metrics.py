@@ -13,6 +13,7 @@ from PIL import Image
 from pathlib import Path
 from argparse import ArgumentParser
 from collections import defaultdict
+from tqdm import tqdm
 
 from utils import instantiate_from_config, prepare_model
 from samplers import EulerSampler
@@ -51,7 +52,6 @@ class InferenceDataset(Dataset):
             str(path).split("/")[-1]
             for path in Path(pred_dir).iterdir()
         ]
-
         self.preds, self.targets = [], []
         for file_name in file_names:
             pred = cv2.cvtColor(cv2.imread(f"{pred_dir}/{file_name}"), cv2.COLOR_BGR2RGB)
@@ -86,13 +86,18 @@ def main():
         "psnr": piq.psnr,
     }
     scores = defaultdict(float)
-    for pred, target in loader:
+    for pred, target in tqdm(loader):
+        pred, target = pred.cuda(), target.cuda()
         for key, score_fn in score_fns.items():
             scores[key] += score_fn(pred, target).item() * len(pred) / len(loader.dataset)
 
     result_dir = Path(args.result_dir)
     result_dir.mkdir(exist_ok=True, parents=True)
-    result_path = result_dir / args.pred_dir.split("/")[-1]
+    
+    if "/" in args.pred_dir.strip("/"):
+        result_path = result_dir / args.pred_dir.split("/")[-1]
+    else:
+        result_path = result_dir / args.pred_dir
     
     with open(result_path, 'w') as file:
         json.dump(scores, file)
