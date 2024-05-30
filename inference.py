@@ -9,6 +9,7 @@ import yaml
 from PIL import Image
 from pathlib import Path
 from argparse import ArgumentParser
+from tqdm import tqdm
 
 from utils import instantiate_from_config, prepare_model
 from samplers import EulerSampler, HeunSampler
@@ -73,6 +74,9 @@ class InferenceDataset(Dataset):
             im = cv2.cvtColor(im, cv2.COLOR_BGR2RGB)
             self.images.append(im)
 
+        self.paths = self.paths
+        self.images = self.images
+
         self.transforms = T.Compose([
             T.ToTensor(),
             T.Normalize([0.5]*3, [0.5]*3, inplace=False),
@@ -88,10 +92,11 @@ class InferenceDataset(Dataset):
         im = self.transforms(im)
         return path, im
 
-def get_timesteps(N, ro):
+def get_timesteps(N, ro, T=15):
     timesteps = np.arange(N) / (N - 1)
-    timesteps = (1 - timesteps)**ro
-    return timesteps
+    timesteps = (1 + timesteps * ((1/T)**(1/ro) - 1))**ro
+    timesteps = list(timesteps) + [0.]
+    return np.asarray(timesteps)
 
 def main():
     args = get_parser()
@@ -132,13 +137,12 @@ def main():
     else:
         timesteps = torch.tensor(timesteps)
     
-    for file_names, lq in loader:
+    for file_names, lq in tqdm(loader):
         lq = lq.cuda()
         out = sampler(timesteps, lq).permute(0, 2, 3, 1).detach().cpu().numpy()
         out = out * 0.5 + 0.5
         for file_name, sr_image in zip(file_names, out):
             Image.fromarray(np.uint8(sr_image*255)).save(str(subdir_path / file_name))
-        break
 
     print(f"Images saved into {subdir_path}")
 
