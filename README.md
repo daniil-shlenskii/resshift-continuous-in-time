@@ -12,7 +12,7 @@ wget https://github.com/zsyOAOA/ResShift/releases/download/v2.0/autoencoder_vq_f
 wget gdown 1P17fgFhSSpL5mbhSND2KjDijxhZLavO_ # denoiser
 ```
 After that you can immediately start working in the `playground/pgd.ipynb` file.
-If you need to upscale some a dataset  of low-resolution images you need run the following line:
+If you need to upscale a dataset of low-resolution images you need run the following line:
 
 ```bash
 python inference.py --in_dir <low-res-dir> --out_dir <dir-to-put-upscales> --config_path <path-to_config> --batch_size 8 --ro 1
