@@ -23,9 +23,8 @@ autoencoder:
 
 model:
   target: models.unet.UNetModelSwin
-  ckpt_path: weights/resshift_realsrx4_s15_v2.pth
+  ckpt_path: weights/model_50000.pt
   use_fp16: False
-  filter_prefix: module.
   params:
     image_size: 64
     in_channels: 3
